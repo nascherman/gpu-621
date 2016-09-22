@@ -1,2 +1,2 @@
 #include <array>
-std::array<double, 2> getPiExclusion(int n);
+std::array<double, 2> getPiExclusion(int n, int threads);

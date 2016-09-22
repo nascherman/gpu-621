@@ -6,7 +6,7 @@
 #include <array>
 using namespace std::chrono;
 
-std::array<double,  2> getPiExclusion(int n) {
+std::array<double,  2> getPiExclusion(int n, int threads) {
   int nthreads;
   std::array<double, 2> results;
   double runtime =  0;
@@ -15,6 +15,7 @@ std::array<double,  2> getPiExclusion(int n) {
   ts = steady_clock::now();
   double x, pi, sum = 0.0;
   double stepSize = 1.0 / (double) n;
+  omp_set_num_threads(threads);
   #pragma omp parallel
   {
      int tid = omp_get_thread_num();
