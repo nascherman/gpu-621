@@ -35,6 +35,7 @@ void dotprod(const float* a, const float* b, int n) {
 
 int main (int argc, char *argv[]) {
     std::cout << "\nCommand Line : ";
+    std::cout << omp_get_max_threads();
     for (int i = 0; i < argc; i++) {
         std::cout << argv[i] << ' ';
     }
