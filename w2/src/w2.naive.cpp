@@ -13,14 +13,14 @@ std::array<double,  2> getPiNaive(int n, int threads) {
 	steady_clock::time_point ts, te;
 	// calculate pi by integrating the area under 1/(1 + x^2) in n steps 
 	double s[16] = { 0.0 };
-	ts = steady_clock::now();
+	omp_set_num_threads(threads);
 	double x, pi, sum = 0.0;
 	double stepSize = 1.0 / (double) n;
-	omp_set_num_threads(threads);
+	ts = steady_clock::now();
 	#pragma omp parallel
 	{
 	   int tid = omp_get_thread_num();
-	   int nt = omp_get_num_threads();
+	   int nt = threads;
 	   if (tid == 0) {
 		   nthreads = nt;
 	   }
