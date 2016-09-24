@@ -4,6 +4,7 @@
 #include <chrono>
 #include <omp.h>
 #include <array>
+
 using namespace std::chrono;
 
 std::array<double,  2> getPiNaive(int n, int threads) {
@@ -13,16 +14,15 @@ std::array<double,  2> getPiNaive(int n, int threads) {
 	steady_clock::time_point ts, te;
 	// calculate pi by integrating the area under 1/(1 + x^2) in n steps 
 	double s[16] = { 0.0 };
-	omp_set_num_threads(threads);
 	double x, pi, sum = 0.0;
 	double stepSize = 1.0 / (double) n;
 	ts = steady_clock::now();
-	#pragma omp parallel
+	#pragma omp parallel num_threads(threads)
 	{
 	   int tid = omp_get_thread_num();
-	   int nt = threads;
+	   int nt = omp_get_num_threads();
 	   if (tid == 0) {
-		   nthreads = nt;
+		  nthreads = nt;
 	   }
 	   for (int i = tid; i < n; i += nt) {
 		  x = ((double)i + 0.5) * stepSize;
