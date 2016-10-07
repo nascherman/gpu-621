@@ -3,6 +3,8 @@
 // Tiled Serial Case
 // prefix_scan.h
 
+#define SERIAL
+
 template <typename T, typename C>
 void incl_scan(
 	const T* in, // source data

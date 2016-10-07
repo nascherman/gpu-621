@@ -1,10 +1,10 @@
 all:
-	g++ -std=c++11 -o w3 -fopenmp -Ofast BalancedTree/w3.main.cpp
+	g++ -I BalancedTree-std=c++11 -o w3 -fopenmp -Ofast w3.main.cpp
 balanced:
-	g++ -std=c++11 -o w3 -fopenmp -Ofast BalancedTree/w3.main.cpp
+	g++ -I BalancedTree -std=c++11 -o w3 -fopenmp -Ofast w3.main.cpp
 spmd:
-	g++ -std=c++11 -o w3 -fopenmp -Ofast ThreeStepSPMD/w3.main.cpp
+	g++ -I ThreeStepSPMD -std=c++11 -o w3 -fopenmp -Ofast w3.main.cpp
 ws:
-	g++ -std=c++11 -o w3 -fopenmp -Ofast ThreeStepWorkSharing/w3.main.cpp
+	g++ -I ThreeStepWorkSharing -std=c++11 -o w3 -fopenmp -Ofast w3.main.cpp
 serial:
-	g++ -std=c++11 -o w3 -fopenmp  -Ofast TiledSerial/w3.main.cpp
+	g++ -I TiledSerial -std=c++11 -o w3 -fopenmp  -Ofast w3.main.cpp
