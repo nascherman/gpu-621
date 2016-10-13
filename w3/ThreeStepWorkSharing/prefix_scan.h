@@ -103,19 +103,19 @@ int scan_parallel(
 )
 {
 	const int tile_size = 2;
-	int nthreads = 1;
+	int nthreads = 0;
 	if (size > 0) {
-		
 			// requested number of tiles
-			int ntiles = (size - 1) / tile_size + 1;
+			int ntiles = 0;
 			int max_tiles = omp_get_max_threads();
 			T* reduced = new T[max_tiles];
 			T* scanRes = new T[max_tiles];
 		#pragma omp parallel 
 		{
-			int nt = omp_get_num_threads();
+			ntiles = omp_get_num_threads();
 			int itile = omp_get_thread_num();
-			int tile_size = (size -1) / (nt + 1);
+
+			int tile_size = (size -1) / (ntiles + 1);
 			int last_tile = ntiles - 1;
 			int last_tile_size = size - last_tile * tile_size;
 
@@ -139,5 +139,5 @@ int scan_parallel(
 		delete[] reduced;
 		delete[] scanRes;
 	}
-	return 1;
+	return omp_get_num_threads();
 }

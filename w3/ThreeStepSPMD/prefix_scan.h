@@ -71,13 +71,6 @@ int scan(
 		int last_tile = ntiles - 1;
 		int last_tile_size = size - last_tile * tile_size;
 
-		/*parallell
-			reduced[tid] = reduce() in + itile * tile_size, ...
-			#pragma omp barrier
-			#pragma omp single
-			excl_scan(...)
-			scan_fn(...)
-		*/
 		// step 1 - reduce each tile separately
 		for (int itile = 0; itile < ntiles; itile++)
 			reduced[itile] = reduce(in + itile * tile_size,
@@ -110,33 +103,27 @@ int scan_parallel(
 )
 {
 	const int tile_size = 2;
-	int nthreads = 1;
+	int nthreads = 0;
 	if (size > 0) {
 		// requested number of tiles
-		int ntiles = (size - 1) / tile_size + 1;
+		int ntiles = 0;
 		int max_tiles = omp_get_max_threads();
 		// allocate outside the parallel region
 		T* reduced = new T[max_tiles];
 		T* scanRes = new T[max_tiles];
-
-		/*parallell solution
-			reduced[tid] = reduce() in + itile * tile_size, ...
-			#pragma omp barrier
-			#pragma omp single
-			excl_scan(...)
-			scan_fn(...)
-		*/
 		#pragma omp parallel 
 		{
-			int nt = omp_get_num_threads();
+			ntiles = omp_get_num_threads();
 			int itile = omp_get_thread_num();
-			int tile_size = (size -1) / (nt + 1);
+
+			int tile_size = (size -1) / (ntiles + 1);
 			int last_tile = ntiles - 1;
 
 			if(itile == 0) nthreads = ntiles;
 
 			int last_tile_size = size - last_tile * tile_size;
 			// step 1 - reduce each tile separately
+			#pragma omp for
 			for (int itile = 0; itile < ntiles; itile++)
 				reduced[itile] = reduce(in + itile * tile_size,
 					itile == last_tile ? last_tile_size : tile_size, combine, T(0));

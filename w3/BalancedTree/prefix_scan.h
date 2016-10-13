@@ -6,10 +6,8 @@
 #define SHORT_CALL
 #define BALANCED
 
-#include <iostream>
-
 template <typename T, typename C>
-void incl_scan(
+int incl_scan(
   const T* in, // source data
   T* out,      // output data
   int size,    // size of source, output data sets
@@ -41,10 +39,12 @@ void incl_scan(
   for (int i = 0; i < size - 1; i++)
     out[i] = out[i + 1];
   out[size - 1] = last;
+
+  return 1;
 }
 
 template <typename T, typename C>
-void incl_scan_parallel(
+int incl_scan_parallel(
   const T* in, // source data
   T* out,      // output data
   int size,    // size of source, output data sets
@@ -52,17 +52,18 @@ void incl_scan_parallel(
   T initial    // initial value
 )
 {
+  int numThreads = 0;
   // initialize
-  // parallelize
   #pragma omp parallel 
   {
-    #pragma omp parallel for
+    numThreads = omp_get_num_threads();
+    #pragma omp for
     for (int i = 0; i < size; i++)
       out[i] = in[i];
     // add inner parallell for
     // upsweep (reduction)
     for (int stride = 1; stride < size; stride <<= 1) {
-      #pragma omp parallel for
+      #pragma omp for
       for (int i = 0; i < size; i += 2 * stride)
         out[2 * stride + i - 1] = combine(out[2 * stride + i - 1],
           out[stride + i - 1]);
@@ -71,7 +72,6 @@ void incl_scan_parallel(
     T last = out[size - 1];
     out[size - 1] = T(0);
     // downsweep
-    // add inner parallell for
     for (int stride = size / 2; stride > 0; stride >>= 1) {
       #pragma omp for
       for (int i = 0; i < size; i += 2 * stride) {
@@ -81,16 +81,17 @@ void incl_scan_parallel(
       }
     }
     // shift left for inclusive scan and add last
-    #pragma omp parallel for
+    #pragma omp for
     for (int i = 0; i < size - 1; i++)
       out[i] = out[i + 1];
 
     out[size - 1] = last;
   }
+  return numThreads;
 }
 
 template <typename T, typename C>
-void excl_scan(
+int excl_scan(
   const T* in, // source data
   T* out,      // output data
   int size,    // size of source, output data sets
@@ -120,10 +121,11 @@ void excl_scan(
       out[2 * stride + i - 1] = combine(temp, out[2 * stride + i - 1]);
     }
   }
+  return 1;
 }
 
 template <typename T, typename C>
-void excl_scan_parallel(
+int excl_scan_parallel(
   const T* in, // source data
   T* out,      // output data
   int size,    // size of source, output data sets
@@ -131,15 +133,17 @@ void excl_scan_parallel(
   T initial    // initial value
 )
 {
+  int numThreads = 0;
   // initialize
   #pragma omp parallel
   {
-    #pragma omp parallel for
+    numThreads = omp_get_num_threads();
+    #pragma omp for
     for (int i = 0; i < size; i++)
       out[i] = in[i];
     // upsweep (reduction)
     for (int stride = 1; stride < size; stride <<= 1) {
-      #pragma omp parallel for
+      #pragma omp for
       for (int i = 0; i < size; i += 2 * stride)
         out[2 * stride + i - 1] = combine(out[2 * stride + i - 1],
           out[stride + i - 1]);
@@ -156,7 +160,7 @@ void excl_scan_parallel(
       }
     }  
   }
-  
+  return numThreads;  
 }
 
 template <typename T, typename C, typename S>
@@ -169,6 +173,5 @@ int scan(
   T initial      // initial value
 )
 {
-  scan_fn(in, out, size, combine, T(0));
-  return 1; // returns number of threads
+  return scan_fn(in, out, size, combine, T(0));
 }
