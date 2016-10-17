@@ -17,16 +17,16 @@ int incl_scan(
 {
   int numThreads = 0;
   // initialize
-  #pragma omp parallel 
+#pragma omp parallel 
   {
     numThreads = omp_get_num_threads();
-    #pragma omp for
+#pragma omp for
     for (int i = 0; i < size; i++)
       out[i] = in[i];
     // add inner parallell for
     // upsweep (reduction)
     for (int stride = 1; stride < size; stride <<= 1) {
-      #pragma omp for
+#pragma omp for
       for (int i = 0; i < size; i += 2 * stride)
         out[2 * stride + i - 1] = combine(out[2 * stride + i - 1],
           out[stride + i - 1]);
@@ -36,7 +36,7 @@ int incl_scan(
     out[size - 1] = T(0);
     // downsweep
     for (int stride = size / 2; stride > 0; stride >>= 1) {
-      #pragma omp for
+#pragma omp for
       for (int i = 0; i < size; i += 2 * stride) {
         T temp = out[stride + i - 1];
         out[stride + i - 1] = out[2 * stride + i - 1];
@@ -44,7 +44,7 @@ int incl_scan(
       }
     }
     // shift left for inclusive scan and add last
-    #pragma omp for
+#pragma omp for
     for (int i = 0; i < size - 1; i++)
       out[i] = out[i + 1];
 
@@ -64,15 +64,15 @@ int excl_scan(
 {
   int numThreads = 0;
   // initialize
-  #pragma omp parallel
+#pragma omp parallel
   {
     numThreads = omp_get_num_threads();
-    #pragma omp for
+#pragma omp for
     for (int i = 0; i < size; i++)
       out[i] = in[i];
     // upsweep (reduction)
     for (int stride = 1; stride < size; stride <<= 1) {
-      #pragma omp for
+#pragma omp for
       for (int i = 0; i < size; i += 2 * stride)
         out[2 * stride + i - 1] = combine(out[2 * stride + i - 1],
           out[stride + i - 1]);
@@ -81,15 +81,15 @@ int excl_scan(
     out[size - 1] = T(0);
     // downsweep
     for (int stride = size / 2; stride > 0; stride >>= 1) {
-      #pragma omp for
+#pragma omp for
       for (int i = 0; i < size; i += 2 * stride) {
         T temp = out[stride + i - 1];
         out[stride + i - 1] = out[2 * stride + i - 1];
         out[2 * stride + i - 1] = combine(temp, out[2 * stride + i - 1]);
       }
-    }  
+    }
   }
-  return numThreads;  
+  return numThreads;
 }
 
 template <typename T, typename C, typename S>
