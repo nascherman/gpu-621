@@ -34,15 +34,15 @@ corona::Image* convolute(corona::Image* image, const int threadsRequested, int& 
 
 	// find shared and private variables declared in each loop
 	// add omp set_num_threads() 
-	#pragma omp parallel num_threads(threadsRequested) shared(pixels, resultPixels) private(py)
+	#pragma omp parallel num_threads(threadsRequested) shared(kernel, pixels, resultPixels) private(px, py)
 	{
 		int ti = omp_get_thread_num(); 
 		if(ti == 0) {
 			threadsSpawned = omp_get_num_threads();
 		}
 
-		for (py = 0; py < height; py++)
-			#pragma omp for
+		#pragma omp for
+		for (py = 0; py < height; py++)	
 			for (px = 0; px < width; px++)
 				(Pixel&)resultPixels[(py * width + px) * 4] = 
 					kernel.combine(pixels, px, py, width, height);
