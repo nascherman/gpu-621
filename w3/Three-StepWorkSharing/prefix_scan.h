@@ -66,32 +66,32 @@ int scan(
 	int nthreads = 0;
 	int ntiles = 0;
 	if (size > 0) {
-			// requested number of tiles
-			
-			int max_tiles = omp_get_max_threads();
-			T* reduced = new T[max_tiles];
-			T* scanRes = new T[max_tiles];
-		#pragma omp parallel 
+		// requested number of tiles
+
+		int max_tiles = omp_get_max_threads();
+		T* reduced = new T[max_tiles];
+		T* scanRes = new T[max_tiles];
+#pragma omp parallel 
 		{
 			ntiles = omp_get_num_threads();
 			int itile = omp_get_thread_num();
 
-			int tile_size = (size -1) / (ntiles + 1);
+			int tile_size = (size - 1) / (ntiles + 1);
 			int last_tile = ntiles - 1;
 			int last_tile_size = size - last_tile * tile_size;
 
-			if(itile == 0) nthreads = ntiles;
+			if (itile == 0) nthreads = ntiles;
 			// step 1 - reduce each tile separately
-			#pragma omp for
+#pragma omp for
 			for (int itile = 0; itile < ntiles; itile++)
 				reduced[itile] = reduce(in + itile * tile_size,
 					itile == last_tile ? last_tile_size : tile_size, combine, T(0));
 			// step 2 - perform exclusive scan on all tiles using reduction outputs 
 			// store results in scanRes[]
-			#pragma omp single
+#pragma omp single
 			excl_scan(reduced, scanRes, ntiles, combine, T(0));
 			// step 3 - scan each tile separately using scanRes[]
-			#pragma omp for
+#pragma omp for
 			for (int itile = 0; itile < ntiles; itile++)
 				scan_fn(in + itile * tile_size, out + itile * tile_size,
 					itile == last_tile ? last_tile_size : tile_size, combine,
