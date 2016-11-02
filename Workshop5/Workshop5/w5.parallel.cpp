@@ -7,7 +7,7 @@
 #include <chrono>
 #include <stdlib.h>
 
-#define GRAIN_SIZE 1
+#define GRAIN_SIZE 100
 
 using namespace std::chrono;
 // report system time
@@ -31,16 +31,20 @@ public:
 	Body(Body& b, tbb::split) : str(b.str), size(b.size), len(b.len), numb(b.numb) {}
 	template<typename Tag>
 	void operator()(const tbb::blocked_range<int>& r, Tag) {
-		for (int i = 0; i < len; i++) {
+		for (int i = r.begin(); i < r.end(); i++) {
 			if (!delimiter(str[i])) {
-				int s = 0;
-				while (i + s < len && !delimiter(str[i + s])) s++;
+				unsigned int s = 0;
+				while (i + s < r.end() && !delimiter(str[i + s])) {
+		///			std::cout << str[i + s] << " String at index " << std::endl;
+					s++;
+				}
 				size[i] = s;
-				int n = 0;
-				for (int j = i + s + 1; j + s < len; j++) {
+	//			std::cout << "Size at " << i << " : " << size[i] << std::endl;
+				unsigned int n = 0;
+				for (int j = i + s + 1; j + s < r.end(); j++) {
 					bool bad = false;
-					for (int k = 0;
-						k < s && k + i < len && k + j < len; k++) {
+					for (int k = r.begin();
+						k < s && k + i < r.end() && k + j < r.end(); k++) {
 						if (str[i + k] != str[j + k]) {
 							bad = true;
 							break;
@@ -60,23 +64,37 @@ public:
 	void reverse_join(Body& a) { 
 		for (int i = 0; i < len; i++) {
 			numb[i] += a.numb[i];
+			size[i] += a.size[i];
 		}
 	}
 	void assign(Body& b) { 
 		for (int i = 0; i < len; i++) {
 			numb[i] = b.numb[i];
+			size[i] = b.size[i];
 		}
 	}
 };
 
-int main(int argc, char** argv) {
+// template<typename T, typename C>
+void scan(
+	const std::string& str,
+	int len,
+	int* size,
+	int* numb
+)
+{
+	Body body(str, len, size, numb);
 	size_t grainsize = GRAIN_SIZE;
+	tbb::parallel_scan(tbb::blocked_range<int>(0, len, grainsize), body, tbb::simple_partitioner());
+}
+
+int main(int argc, char** argv) {
+	
 	if (argc != 2) {
 		std::cerr << "*** Incorrect number of arguments ***\n";
 		std::cerr << "Usage: " << argv[0] << " filename\n";
 		return 1;
 	}
-
 	// load text from file to string
 	std::ifstream file(argv[1]);
 	std::string str;
@@ -91,10 +109,12 @@ int main(int argc, char** argv) {
 	int len = str.size();
 	int* size = new int[len];
 	int* numb = new int[len];
-	Body body(str, len, size, numb);
+	//Body body(str, len, size, numb);
 	ts = steady_clock::now();
-	tbb::parallel_scan(tbb::blocked_range<int>(0, len, grainsize), body, tbb::simple_partitioner());
+	scan(str, len, size, numb);
+	// tbb::parallel_scan(tbb::blocked_range<int>(0, len, grainsize), body, tbb::simple_partitioner());
 	te = steady_clock::now();
+	std::cout << "Completed parallel scan " << std::endl;
 	// remove duplicate words
 	for (int i = 0; i < len; i++) {
 		if (size[i]) {
@@ -129,6 +149,7 @@ int main(int argc, char** argv) {
 					maxpos = i;
 				}
 			}
+			std::cout << "i: " << i << " " << size[i] << " Size at i " << std::endl;
 			i += size[i];
 		}
 	}

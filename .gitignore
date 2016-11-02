@@ -27,5 +27,14 @@
 *.exe
 *.out
 *.app
+*.opendb
+*.db
+*vcxproj.user
 
 *^[.*]
+
+
+
+**/**/Debug
+**/Debug
+**/.vs
