@@ -7,7 +7,7 @@
 #include <chrono>
 #include <stdlib.h>
 
-#define GRAIN_SIZE 100
+#define GRAIN_SIZE 100000
 
 using namespace std::chrono;
 // report system time
@@ -116,6 +116,7 @@ int main(int argc, char** argv) {
 	te = steady_clock::now();
 	std::cout << "Completed parallel scan " << std::endl;
 	// remove duplicate words
+	std::cout << "remove duplicates " << std::endl;
 	for (int i = 0; i < len; i++) {
 		if (size[i]) {
 			for (int j = i + 1; j < len; j++) {
@@ -137,8 +138,9 @@ int main(int argc, char** argv) {
 	// determine longest word
 	int maxsize = 0;
 	int maxpos = 0;
+	std::cout << "determining longest word" << std::endl;
 	for (int i = 0; i < len; ++i) {
-		if (size[i]) {
+		if (size[i] & size[i] > 0) {
 			if (numb[i] != 0) {
 				std::cout << numb[i] << " * ";
 				for (int j = 0; j < size[i]; ++j)
@@ -149,7 +151,6 @@ int main(int argc, char** argv) {
 					maxpos = i;
 				}
 			}
-			std::cout << "i: " << i << " " << size[i] << " Size at i " << std::endl;
 			i += size[i];
 		}
 	}
