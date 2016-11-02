@@ -7,7 +7,7 @@
 #include <chrono>
 #include <stdlib.h>
 
-#define GRAIN_SIZE 100000
+#define GRAIN_SIZE 1
 
 using namespace std::chrono;
 // report system time
