@@ -50,7 +50,7 @@ double matmul_1(const double* a, const double* b, double* c, int n) {
 }
 // matmul_2 returns the product a * b using cilk for
 double matmul_2(const double* a, const double* b, double* c, int n) {	
-	cilk_for (int i = 0; i < n; i++) {
+	for (int i = 0; i < n; i++) {
 		for (int j = 0; j < n; j++) 
 			c[i * n + j] = 0;	
 	}
@@ -62,7 +62,7 @@ double matmul_2(const double* a, const double* b, double* c, int n) {
 		}
 	}
 	double diag = 0.0;
-	cilk_for(int i = 0; i < n; i++) {
+	for(int i = 0; i < n; i++) {
 		diag += c[i * n + i];
 	}
 	return diag;
