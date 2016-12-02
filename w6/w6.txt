@@ -1,0 +1,305 @@
+Script started on Thu 03 Nov 2016 11:32:17 AM EDT
+]0;nascherman@laptop: ~/gpu-621/w6[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w6[00m$ make[K[K[K[Kcat w6.cpp 
+// Workshop 6 - Threading and Vectorization
+// w6.matmul.cpp
+#include <iostream>
+#include <iomanip>
+#include <cstdlib>
+#include <chrono>
+#include <cilk/cilk.h>
+#include <cilk/reducer_opadd.h>
+
+using namespace std::chrono;
+
+void reportTime(const char* msg, steady_clock::duration span) {
+	auto ms = duration_cast<milliseconds>(span);
+	std::cout << msg << " - took - " <<
+		ms.count() << " milliseconds" << std::endl;
+}
+// matmul_0 returns the product a * b using basic serial logic
+double matmul_0(const double* a, const double* b, double* c, int n) {
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < n; j++) {
+			double sum = 0.0;
+			for (int k = 0; k < n; k++)
+				sum += a[i * n + k] * b[k * n + j];
+			c[i * n + j] = sum;
+		}
+	}
+	double diag = 0.0;
+	for (int i = 0; i < n; i++)
+		diag += c[i * n + i];
+	return diag;
+}
+// matmul_1 returns the product a * b using serial logic loops reversed 
+double matmul_1(const double* a, const double* b, double* c, int n) {
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < n; j++) 
+			c[i * n + j] = 0;	
+	}
+
+	for (int i = 0; i < n; i++) {
+		for (int k = 0; k < n; k++) {
+			for (int j = 0; j < n; j++)
+				c[i * n + j] += a[i * n + k] * b[k * n + j];
+		}
+	}
+	double diag = 0.0;
+	for (int i = 0; i < n; i++) {
+		diag += c[i * n + i];
+	}
+	return diag;
+}
+// matmul_2 returns the product a * b using cilk for
+double matmul_2(const double* a, const double* b, double* c, int n) {	
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < n; j++) 
+			c[i * n + j] = 0;	
+	}
+
+	cilk_for (int i = 0; i < n; i++) {
+		for (int k = 0; k < n; k++) {
+			for (int j = 0; j < n; j++)
+				c[i * n + j] += a[i * n + k] * b[k * n + j];
+		}
+	}
+	double diag = 0.0;
+	for(int i = 0; i < n; i++) {
+		diag += c[i * n + i];
+	}
+	return diag;
+}
+// matmul_3 returns the product a * b using cilk for
+// and reducer hyperobject
+double matmul_3(const double* a, const double* b, double* c, int n) {
+	cilk_for (int i = 0; i < n; i++) {
+		for (int j = 0; j < n; j++) 
+			c[i * n + j] = 0;	
+	}
+	cilk_for (int i = 0; i < n; i++) {
+		for (int k = 0; k < n; k++) {
+			for (int j = 0; j < n; j++)
+				c[i * n + j] += a[i * n + k] * b[k * n + j];
+		}
+	}
+	cilk::reducer_opadd<double > diag(0.0);
+	cilk_for(int i = 0; i < n; i++) {
+		diag += c[i * n + i];
+	}
+	return diag.get_value();
+}
+// matmul_4 returns the product a * b using cilk for, reducer,
+// and vectorization
+double matmul_4(const double* a, const double* b, double* c, int n) {
+	c[0:n*n] = 0;
+	cilk_for (int i = 0; i < n; i++) {
+		#pragma simd
+		for (int k = 0; k < n; k++) {
+			for (int j = 0; j < n; j++) {
+				c[i * n + j] += a[i * n + k] * b[k * n + j];
+			}
+		}
+	}
+	cilk::reducer_opadd<double > diag(0.0);
+	cilk_for(int i = 0; i < n; i++) {
+		diag += c[i * n + i];
+	}
+	return diag.get_value();
+}
+int main(int argc, char** argv) {
+	std::cout << std::fixed << std::setprecision(2);
+
+	steady_clock::time_point ts, te;
+	double diag;
+	double* a, *b, *c;
+	int nSize[] = { 
+		500, 
+		1000, 
+		1500, 
+		2000, 
+		2500,
+		3000,
+		3500,
+		4000
+	};
+
+	for(int n = 0; n < sizeof(nSize)/sizeof(nSize[0]); n++)  {
+		int len = nSize[n];
+		try {
+			a = new double[len*len];
+			b = new double[len*len];
+			c = new double[len*len];
+		}
+		catch (std::exception& e) {
+			std::cerr << "*** Failed to Allocate Memory for "
+				<< len << " by " << len << "matrices" << std::endl;
+			return 2;
+		}
+		// initialize a and b
+		for (int i = 0; i < len*len; i++) {
+			a[i] = 0.0;
+			b[i] = 0.0;
+		}
+		for (int i = 0; i < len; i++) {
+			a[i*len + i] = 1.0;
+			b[i*len + i] = 1.0;
+		}
+		ts = steady_clock::now();
+		diag = matmul_0(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("w6 serial        ", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_1(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 serial reverse", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_2(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 cilk_for      ", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_3(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 cilk_for reduc", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_4(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 cilk_for simd ", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		// deallocate
+		delete[] a;
+		delete[] b;
+		delete[] c;
+		std::cout << std::endl;
+	}
+	char ci;
+	std::cin >> ci;
+}]0;nascherman@laptop: ~/gpu-621/w6[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w6[00m$ mcat w6.cpp [7Pexitcat w6.cpp m[Kake
+g++ -o w6 -std=c++11 -fcilkplus w6.cpp
+]0;nascherman@laptop: ~/gpu-621/w6[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w6[00m$ ./w6
+w6 serial         - took - 808 milliseconds
+500 = 500.00
+
+w6 serial reverse - took - 837 milliseconds
+500 = 500.00
+
+w6 cilk_for       - took - 744 milliseconds
+500 = 500.00
+
+w6 cilk_for reduc - took - 685 milliseconds
+500 = 500.00
+
+w6 cilk_for simd  - took - 769 milliseconds
+500 = 500.00
+
+w6 serial         - took - 8025 milliseconds
+1000 = 1000.00
+
+w6 serial reverse - took - 6883 milliseconds
+1000 = 1000.00
+
+w6 cilk_for       - took - 5729 milliseconds
+1000 = 1000.00
+
+w6 cilk_for reduc - took - 5849 milliseconds
+1000 = 1000.00
+
+w6 cilk_for simd  - took - 5859 milliseconds
+1000 = 1000.00
+
+w6 serial         - took - 30423 milliseconds
+1500 = 1500.00
+
+w6 serial reverse - took - 23239 milliseconds
+1500 = 1500.00
+
+w6 cilk_for       - took - 19739 milliseconds
+1500 = 1500.00
+
+w6 cilk_for reduc - took - 19515 milliseconds
+1500 = 1500.00
+
+w6 cilk_for simd  - took - 19550 milliseconds
+1500 = 1500.00
+
+w6 serial         - took - 62371 milliseconds
+2000 = 2000.00
+
+w6 serial reverse - took - 54858 milliseconds
+2000 = 2000.00
+
+w6 cilk_for       - took - 46285 milliseconds
+2000 = 2000.00
+
+w6 cilk_for reduc - took - 46101 milliseconds
+2000 = 2000.00
+
+w6 cilk_for simd  - took - 46048 milliseconds
+2000 = 2000.00
+
+w6 serial         - took - 146772 milliseconds
+2500 = 2500.00
+
+w6 serial reverse - took - 107839 milliseconds
+2500 = 2500.00
+
+w6 cilk_for       - took - 90747 milliseconds
+2500 = 2500.00
+
+w6 cilk_for reduc - took - 89828 milliseconds
+2500 = 2500.00
+
+w6 cilk_for simd  - took - 89627 milliseconds
+2500 = 2500.00
+
+w6 serial         - took - 238580 milliseconds
+3000 = 3000.00
+
+w6 serial reverse - took - 185146 milliseconds
+3000 = 3000.00
+
+w6 cilk_for       - took - 156906 milliseconds
+3000 = 3000.00
+
+w6 cilk_for reduc - took - 155315 milliseconds
+3000 = 3000.00
+
+w6 cilk_for simd  - took - 156203 milliseconds
+3000 = 3000.00
+
+w6 serial         - took - 429851 milliseconds
+3500 = 3500.00
+
+w6 serial reverse - took - 324462 milliseconds
+3500 = 3500.00
+
+w6 cilk_for       - took - 313848 milliseconds
+3500 = 3500.00
+
+w6 cilk_for reduc - took - 321419 milliseconds
+3500 = 3500.00
+
+w6 cilk_for simd  - took - 288002 milliseconds
+3500 = 3500.00
+
+w6 serial         - took - 669202 milliseconds
+4000 = 4000.00
+
+w6 serial reverse - took - 492683 milliseconds
+4000 = 4000.00
+
+w6 cilk_for       - took - 393073 milliseconds
+4000 = 4000.00
+
+w6 cilk_for reduc - took - 379389 milliseconds
+4000 = 4000.00
+
+w6 cilk_for simd  - took - 398553 milliseconds
+4000 = 4000.00
+
+nascherman@laptop: ~/gpu-621/w6[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w6[00m$ exit
+
+Script done on Thu 03 Nov 2016 01:11:01 PM EDT

@@ -1,0 +1,657 @@
+Student Name: Nick Scherman
+Studen ID: 031985138
+
+Script started on Thu 10 Nov 2016 11:18:48 AM EST
+]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ cat w7.serial.cpp 
+// Workshop 7 - Fully Recursive Quick Sort
+ // w7.fr.cpp
+ // after McCool etal. (2012) Structured Parallel Programming
+
+ #include <iostream>
+ #include <iomanip>
+ #include <cstdlib>
+ #include <cstddef>
+ #include <algorithm>
+ #include <chrono>
+ using namespace std::chrono;
+
+ ptrdiff_t QUICKSORT_CUTOFF = 500;
+ // report system time
+ //
+ void reportTime(const char* msg, steady_clock::duration span) {
+     auto ms = duration_cast<milliseconds>(span);
+     std::cout << msg << " - took - " <<
+         ms.count() << " milliseconds" << std::endl;
+ }
+ // return the address of the median value across 3 addresses
+ template <typename T>
+ T* median_of_three(T* x, T* y, T* z) {
+     return *x < *y ? *y < *z ? y :
+            *x < * z ? z : x :
+            *z < *y ? y : *z <  *x ? z : x;
+ }
+ // return the address that holds the partition value
+ // select that value to be the median of 3 medians
+ template <typename T>
+ T* select_partition_value(T* first, T* last) {
+    int offset = (last - first) / 8;
+    return median_of_three(
+        median_of_three(first, first + offset, first + offset * 2),
+        median_of_three(first + offset * 3, first + offset * 4,
+         last - (3 * offset + 1)),
+        median_of_three(last - (2 * offset + 1), last - (offset + 1), 
+         last - 1)
+    );
+ }
+ // return the address of the partition value in the partitioned
+ // sequence; return nullptr if all values are equal
+ // divide the sequence [first ... last) by selecting the
+ // partition value and then rearranging the values into a
+ // partitioned sequence [first ... middle, middle + 1 ... last)
+ template <typename T>
+ T* divide(T* first, T* last) {
+     // select partition value
+     T* p = select_partition_value(first, last);
+     // move partition value to the front of the sequence
+     std::swap(*first, *p);
+     // copy the partition value
+     T pv = *first;
+     // rearrange the values into two partitions and retrieve
+     // the address of end of the first partition
+     T* middle = std::partition(first + 1, last,
+      [=](const T& x) { return x < pv;}) - 1;
+     if (middle != first) {
+         // move the partition value to the end of the first
+         // partition
+         std::swap(*first, *middle);
+     }
+     else {
+         // check if all values are equal
+         if (last == std::find_if(first + 1, last,
+          [=](const T& x) { return pv < x; }) )
+             return nullptr;
+     }
+     return middle;
+ }
+ // quicksort divides the sequence [first ... last) into
+ // two partitions and sorts each partition independently
+ template <typename T>
+ void quick_sort(T* first, T* last) {
+     if (last - first <= QUICKSORT_CUTOFF) {
+         std::sort(first, last);
+     }
+     else {
+         if (T* middle = divide(first, last)) {
+             quick_sort(first, middle);
+             quick_sort(middle + 1, last);
+         }
+     }
+ }
+ int main(int argc, char** argv) {
+     if (argc != 2) {
+         std::cerr << "*** Incorrect number of arguments ***\n";
+         std::cerr << "Usage: " << argv[0]
+          << " no_of_rows_or_columns\n";
+         return 1;
+     }
+
+     // size of array
+     int n = std::atoi(argv[1]);
+
+     // allocate memory for the array
+     steady_clock::time_point ts, te;
+     int* a;
+     try {
+         a = new int[n];
+     } catch (const std::exception& e) {
+         std::cerr << e.what() << std::endl;
+         return 2;
+     }
+     // initialize to random values
+     for (int i = 0; i < n; i++)
+         a[i] = std::rand();
+
+     // sort the elements
+     ts = steady_clock::now();
+     quick_sort(a, a + n);
+     te = steady_clock::now();
+     reportTime("w7 fully recursive serial", te - ts);
+
+     std::cout << n << " elements sorted\n";
+     if (n < 100) {
+         for (int i = 0; i < n; i++) {
+             if (i && i % 8 == 0) std::cout << std::endl;
+             std::cout << std::setw(10) << a[i] << ' ';
+         }
+     }
+     else {
+         std::cout << std::setw(10) << a[0] << ' ';
+         std::cout << std::setw(10) << a[1] << ' ';
+         std::cout << std::setw(10) << "..." << ' ';
+         std::cout << std::setw(10) << a[n-2] << ' ';
+         std::cout << std::setw(10) << a[n-1] << ' ';
+     }
+     std::cout << std::endl;
+
+     // deallocate memory
+     delete [] a;
+ }
+ ]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ cat w7.parallel.cpp 
+// Workshop 7 - Fully Recursive Quick Sort
+ // w7.fr.cpp
+ // after McCool etal. (2012) Structured Parallel Programming
+
+#include <iostream>
+#include <iomanip>
+#include <cstdlib>
+#include <cstddef>
+#include <algorithm>
+#include <chrono>
+#include <cilk/cilk.h> 
+
+ using namespace std::chrono;
+
+ ptrdiff_t QUICKSORT_CUTOFF = 500;
+ // report system time
+ //
+ void reportTime(const char* msg, steady_clock::duration span) {
+     auto ms = duration_cast<milliseconds>(span);
+     std::cout << msg << " - took - " <<
+         ms.count() << " milliseconds" << std::endl;
+ }
+ // return the address of the median value across 3 addresses
+ template <typename T>
+ T* median_of_three(T* x, T* y, T* z) {
+     return *x < *y ? *y < *z ? y :
+            *x < * z ? z : x :
+            *z < *y ? y : *z <  *x ? z : x;
+ }
+ // return the address that holds the partition value
+ // select that value to be the median of 3 medians
+ template <typename T>
+ T* select_partition_value(T* first, T* last) {
+    int offset = (last - first) / 8;
+    return median_of_three(
+        median_of_three(first, first + offset, first + offset * 2),
+        median_of_three(first + offset * 3, first + offset * 4,
+         last - (3 * offset + 1)),
+        median_of_three(last - (2 * offset + 1), last - (offset + 1), 
+         last - 1)
+    );
+ }
+ // return the address of the partition value in the partitioned
+ // sequence; return nullptr if all values are equal
+ // divide the sequence [first ... last) by selecting the
+ // partition value and then rearranging the values into a
+ // partitioned sequence [first ... middle, middle + 1 ... last)
+ template <typename T>
+ T* divide(T* first, T* last) {
+     // select partition value
+     T* p = select_partition_value(first, last);
+     // move partition value to the front of the sequence
+     std::swap(*first, *p);
+     // copy the partition value
+     T pv = *first;
+     // rearrange the values into two partitions and retrieve
+     // the address of end of the first partition
+     T* middle = std::partition(first + 1, last,
+      [=](const T& x) { return x < pv;}) - 1;
+     if (middle != first) {
+         // move the partition value to the end of the first
+         // partition
+         std::swap(*first, *middle);
+     }
+     else {
+         // check if all values are equal
+         if (last == std::find_if(first + 1, last,
+          [=](const T& x) { return pv < x; }) )
+             return nullptr;
+     }
+     return middle;
+ }
+ // quicksort divides the sequence [first ... last) into
+ // two partitions and sorts each partition independently
+ template <typename T>
+ void quick_sort(T* first, T* last) {
+     if (last - first <= QUICKSORT_CUTOFF) {
+         std::sort(first, last);
+     }
+     else {
+         if (T* middle = divide(first, last)) {
+             cilk_spawn quick_sort(first, middle);
+             quick_sort(middle + 1, last);
+         }
+     }
+ }
+ int main(int argc, char** argv) {
+     if (argc != 2) {
+         std::cerr << "*** Incorrect number of arguments ***\n";
+         std::cerr << "Usage: " << argv[0]
+          << " no_of_rows_or_columns\n";
+         return 1;
+     }
+
+     // size of array
+     int n = std::atoi(argv[1]);
+
+     // allocate memory for the array
+     steady_clock::time_point ts, te;
+     int* a;
+     try {
+         a = new int[n];
+     } catch (const std::exception& e) {
+         std::cerr << e.what() << std::endl;
+         return 2;
+     }
+     // initialize to random values
+     for (int i = 0; i < n; i++)
+         a[i] = std::rand();
+
+     // sort the elements
+     ts = steady_clock::now();
+     quick_sort(a, a + n);
+     te = steady_clock::now();
+     reportTime("w7 fully recursive parallel", te - ts);
+
+     std::cout << n << " elements sorted\n";
+     if (n < 100) {
+         for (int i = 0; i < n; i++) {
+             if (i && i % 8 == 0) std::cout << std::endl;
+             std::cout << std::setw(10) << a[i] << ' ';
+         }
+     }
+     else {
+         std::cout << std::setw(10) << a[0] << ' ';
+         std::cout << std::setw(10) << a[1] << ' ';
+         std::cout << std::setw(10) << "..." << ' ';
+         std::cout << std::setw(10) << a[n-2] << ' ';
+         std::cout << std::setw(10) << a[n-1] << ' ';
+     }
+     std::cout << std::endl;
+
+     // deallocate memory
+     delete [] a;
+ }
+ ]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ cat w7.semi-serial.cpp 
+// Workshop 7 - Fully Recursive Quick Sort
+ // w7.fr.cpp
+ // after McCool etal. (2012) Structured Parallel Programming
+
+ #include <iostream>
+ #include <iomanip>
+ #include <cstdlib>
+ #include <cstddef>
+ #include <algorithm>
+ #include <chrono>
+ using namespace std::chrono;
+
+ ptrdiff_t QUICKSORT_CUTOFF = 500;
+ // report system time
+ //
+ void reportTime(const char* msg, steady_clock::duration span) {
+     auto ms = duration_cast<milliseconds>(span);
+     std::cout << msg << " - took - " <<
+         ms.count() << " milliseconds" << std::endl;
+ }
+ // return the address of the median value across 3 addresses
+ template <typename T>
+ T* median_of_three(T* x, T* y, T* z) {
+     return *x < *y ? *y < *z ? y :
+            *x < * z ? z : x :
+            *z < *y ? y : *z <  *x ? z : x;
+ }
+ // return the address that holds the partition value
+ // select that value to be the median of 3 medians
+ template <typename T>
+ T* select_partition_value(T* first, T* last) {
+    int offset = (last - first) / 8;
+    return median_of_three(
+        median_of_three(first, first + offset, first + offset * 2),
+        median_of_three(first + offset * 3, first + offset * 4,
+         last - (3 * offset + 1)),
+        median_of_three(last - (2 * offset + 1), last - (offset + 1), 
+         last - 1)
+    );
+ }
+ // return the address of the partition value in the partitioned
+ // sequence; return nullptr if all values are equal
+ // divide the sequence [first ... last) by selecting the
+ // partition value and then rearranging the values into a
+ // partitioned sequence [first ... middle, middle + 1 ... last)
+ template <typename T>
+ T* divide(T* first, T* last) {
+     // select partition value
+     T* p = select_partition_value(first, last);
+     // move partition value to the front of the sequence
+     std::swap(*first, *p);
+     // copy the partition value
+     T pv = *first;
+     // rearrange the values into two partitions and retrieve
+     // the address of end of the first partition
+     T* middle = std::partition(first + 1, last,
+      [=](const T& x) { return x < pv;}) - 1;
+     if (middle != first) {
+         // move the partition value to the end of the first
+         // partition
+         std::swap(*first, *middle);
+     }
+     else {
+         // check if all values are equal
+         if (last == std::find_if(first + 1, last,
+          [=](const T& x) { return pv < x; }) )
+             return nullptr;
+     }
+     return middle;
+ }
+ // quicksort divides the sequence [first ... last) into
+ // two partitions and sorts each partition independently
+ template <typename T>
+ void quick_sort(T* first, T* last) {
+     while (last - first > QUICKSORT_CUTOFF) {
+        T* middle = divide(first, last);
+        if(!middle) return;
+        if(middle - first < last - (middle + 1)) {
+            quick_sort(first, middle);
+            first = middle + 1;
+        }
+        else {
+            quick_sort(middle + 1, last);
+            last = middle;
+        }
+    }
+    std::sort(first, last);   
+ }
+ int main(int argc, char** argv) {
+     if (argc != 2) {
+         std::cerr << "*** Incorrect number of arguments ***\n";
+         std::cerr << "Usage: " << argv[0]
+          << " no_of_rows_or_columns\n";
+         return 1;
+     }
+
+     // size of array
+     int n = std::atoi(argv[1]);
+
+     // allocate memory for the array
+     steady_clock::time_point ts, te;
+     int* a;
+     try {
+         a = new int[n];
+     } catch (const std::exception& e) {
+         std::cerr << e.what() << std::endl;
+         return 2;
+     }
+     // initialize to random values
+     for (int i = 0; i < n; i++)
+         a[i] = std::rand();
+
+     // sort the elements
+     ts = steady_clock::now();
+     quick_sort(a, a + n);
+     te = steady_clock::now();
+     reportTime("w7 semi recursive serial", te - ts);
+
+     std::cout << n << " elements sorted\n";
+     if (n < 100) {
+         for (int i = 0; i < n; i++) {
+             if (i && i % 8 == 0) std::cout << std::endl;
+             std::cout << std::setw(10) << a[i] << ' ';
+         }
+     }
+     else {
+         std::cout << std::setw(10) << a[0] << ' ';
+         std::cout << std::setw(10) << a[1] << ' ';
+         std::cout << std::setw(10) << "..." << ' ';
+         std::cout << std::setw(10) << a[n-2] << ' ';
+         std::cout << std::setw(10) << a[n-1] << ' ';
+     }
+     std::cout << std::endl;
+
+     // deallocate memory
+     delete [] a;
+ }
+ ]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ cat w7.semi-parallel.cpp 
+// Workshop 7 - Fully Recursive Quick Sort
+// w7.fr.cpp
+// after McCool etal. (2012) Structured Parallel Programming
+
+#include <iostream>
+#include <iomanip>
+#include <cstdlib>
+#include <cstddef>
+#include <algorithm>
+#include <chrono>
+#include <cilk/cilk.h>
+
+ using namespace std::chrono;
+
+ ptrdiff_t QUICKSORT_CUTOFF = 500;
+ // report system time
+ //
+ void reportTime(const char* msg, steady_clock::duration span) {
+     auto ms = duration_cast<milliseconds>(span);
+     std::cout << msg << " - took - " <<
+         ms.count() << " milliseconds" << std::endl;
+ }
+ // return the address of the median value across 3 addresses
+ template <typename T>
+ T* median_of_three(T* x, T* y, T* z) {
+     return *x < *y ? *y < *z ? y :
+            *x < * z ? z : x :
+            *z < *y ? y : *z <  *x ? z : x;
+ }
+ // return the address that holds the partition value
+ // select that value to be the median of 3 medians
+ template <typename T>
+ T* select_partition_value(T* first, T* last) {
+    int offset = (last - first) / 8;
+    return median_of_three(
+        median_of_three(first, first + offset, first + offset * 2),
+        median_of_three(first + offset * 3, first + offset * 4,
+         last - (3 * offset + 1)),
+        median_of_three(last - (2 * offset + 1), last - (offset + 1), 
+         last - 1)
+    );
+ }
+ // return the address of the partition value in the partitioned
+ // sequence; return nullptr if all values are equal
+ // divide the sequence [first ... last) by selecting the
+ // partition value and then rearranging the values into a
+ // partitioned sequence [first ... middle, middle + 1 ... last)
+ template <typename T>
+ T* divide(T* first, T* last) {
+     // select partition value
+     T* p = select_partition_value(first, last);
+     // move partition value to the front of the sequence
+     std::swap(*first, *p);
+     // copy the partition value
+     T pv = *first;
+     // rearrange the values into two partitions and retrieve
+     // the address of end of the first partition
+     T* middle = std::partition(first + 1, last,
+      [=](const T& x) { return x < pv;}) - 1;
+     if (middle != first) {
+         // move the partition value to the end of the first
+         // partition
+         std::swap(*first, *middle);
+     }
+     else {
+         // check if all values are equal
+         if (last == std::find_if(first + 1, last,
+          [=](const T& x) { return pv < x; }) )
+             return nullptr;
+     }
+     return middle;
+ }
+ // quicksort divides the sequence [first ... last) into
+ // two partitions and sorts each partition independently
+ template <typename T>
+ void quick_sort(T* first, T* last) {
+    while (last - first > QUICKSORT_CUTOFF) {
+        T* middle = divide(first, last);
+        if(!middle) return;
+        if(middle - first < last - (middle + 1)) {
+            cilk_spawn quick_sort(first, middle);
+            first = middle + 1;
+        }
+        else {
+            cilk_spawn quick_sort(middle + 1, last);
+            last = middle;
+        }
+    }
+    std::sort(first, last);   
+ }
+ int main(int argc, char** argv) {
+     if (argc != 2) {
+         std::cerr << "*** Incorrect number of arguments ***\n";
+         std::cerr << "Usage: " << argv[0]
+          << " no_of_rows_or_columns\n";
+         return 1;
+     }
+
+     // size of array
+     int n = std::atoi(argv[1]);
+
+     // allocate memory for the array
+     steady_clock::time_point ts, te;
+     int* a;
+     try {
+         a = new int[n];
+     } catch (const std::exception& e) {
+         std::cerr << e.what() << std::endl;
+         return 2;
+     }
+     // initialize to random values
+     for (int i = 0; i < n; i++)
+         a[i] = std::rand();
+
+     // sort the elements
+     ts = steady_clock::now();
+     quick_sort(a, a + n);
+     te = steady_clock::now();
+     reportTime("w7 semi recursive parallel", te - ts);
+
+     std::cout << n << " elements sorted\n";
+     if (n < 100) {
+         for (int i = 0; i < n; i++) {
+             if (i && i % 8 == 0) std::cout << std::endl;
+             std::cout << std::setw(10) << a[i] << ' ';
+         }
+     }
+     else {
+         std::cout << std::setw(10) << a[0] << ' ';
+         std::cout << std::setw(10) << a[1] << ' ';
+         std::cout << std::setw(10) << "..." << ' ';
+         std::cout << std::setw(10) << a[n-2] << ' ';
+         std::cout << std::setw(10) << a[n-1] << ' ';
+     }
+     std::cout << std::endl;
+
+     // deallocate memory
+     delete [] a;
+ }
+ ]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ ./w7.sh
+g++ -o w7-serial -std=c++11 w7.serial.cpp
+g++ -o w7-semi-serial -std=c++11 w7.semi-serial.cpp
+g++ -o w7-cilk -std=c++11 -fcilkplus w7.parallel.cpp
+g++ -o w7-semi-cilk -std=c++11 -fcilkplus w7.semi-parallel.cpp
+chmod: cannot access 'w8-*': No such file or directory
+w7 fully recursive serial - took - 350 milliseconds
+1000000 elements sorted
+      1210       3722        ... 2147477011 2147480021 
+w7 semi recursive serial - took - 348 milliseconds
+1000000 elements sorted
+      1210       3722        ... 2147477011 2147480021 
+w7 fully recursive parallel - took - 140 milliseconds
+1000000 elements sorted
+      1210       3722        ... 2147477011 2147480021 
+w7 semi recursive parallel - took - 139 milliseconds
+1000000 elements sorted
+      1210       3722        ... 2147477011 2147480021 
+w7 fully recursive serial - took - 1134 milliseconds
+3000000 elements sorted
+       880       1210        ... 2147481194 2147481384 
+w7 semi recursive serial - took - 1107 milliseconds
+3000000 elements sorted
+       880       1210        ... 2147481194 2147481384 
+w7 fully recursive parallel - took - 441 milliseconds
+3000000 elements sorted
+       880       1210        ... 2147481194 2147481384 
+w7 semi recursive parallel - took - 436 milliseconds
+3000000 elements sorted
+       880       1210        ... 2147481194 2147481384 
+w7 fully recursive serial - took - 1940 milliseconds
+5000000 elements sorted
+        37        614        ... 2147481500 2147482567 
+w7 semi recursive serial - took - 1920 milliseconds
+5000000 elements sorted
+        37        614        ... 2147481500 2147482567 
+w7 fully recursive parallel - took - 804 milliseconds
+5000000 elements sorted
+        37        614        ... 2147481500 2147482567 
+w7 semi recursive parallel - took - 796 milliseconds
+5000000 elements sorted
+        37        614        ... ok - 2754 milliseconds
+7000000 elements sorted
+        37        614        ... 2147481902 2147482567 
+w7 semi recursive serial - took - 2733 milliseconds
+7000000 elements sorted
+        37        614        ... 2147481902 2147482567 
+w7 fully recursive parallel - took - 1097 milliseconds
+7000000 elements sorted
+        37        614        ... 2147481902 2147482567 
+w7 semi recursive parallel - took - 1109 milliseconds
+7000000 elements sorted
+        37        614        ... 2147481902 2147482567 
+w7 fully recursive serial - took - 3629 milliseconds
+9000000 elements sorted
+        37        614        ... 2147482567 2147483025 
+w7 semi recursive serial - took - 3583 milliseconds
+9000000 elements sorted
+        37        614        ... 2147482567 2147483025 
+w7 fully recursive parallel - took - 1462 milliseconds
+9000000 elements sorted
+        37        614        ... 2147482567 2147483025 
+w7 semi recursive parallel - took - 1467 milliseconds
+9000000 elements sorted
+        37        614        ... 2147482567 2147483025 
+w7 fully recursive serial - took - 4488 milliseconds
+11000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 semi recursive serial - took - 4469 milliseconds
+11000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 fully recursive parallel - took - 1818 milliseconds
+11000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 semi recursive parallel - took - 1978 milliseconds
+11000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 fully recursive serial - took - 5338 milliseconds
+13000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 semi recursive serial - took - 6071 milliseconds
+13000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 fully recursive parallel - took - 3561 milliseconds
+13000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 semi recursive parallel - took - 5084 milliseconds
+13000000 elements sorted
+        37         95        ... 2147482751 2147483025 
+w7 fully recursive serial - took - 7560 milliseconds
+15000000 elements sorted
+        37         95        ... 2147483578 2147483611 
+w7 semi recursive serial - took - 6097 milliseconds
+15000000 elements sorted
+        37         95        ... 2147483578 2147483611 
+w7 fully recursive parallel - took - 2784 milliseconds
+15000000 elements sorted
+        37         95        ... 2147483578 2147483611 
+w7 semi recursive parallel - took - 3092 milliseconds
+15000000 elements sorted
+        37         95        ... 2147483578 2147483611 
+]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ [K]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ 350[K[K[K^C
+]0;nascherman@laptop: ~/gpu-621/w7[01;32mnascherman@laptop[00m:[01;34m~/gpu-621/w7[00m$ exit
+
+Script done on Thu 10 Nov 2016 12:16:50 PM EST

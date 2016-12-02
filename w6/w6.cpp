@@ -105,77 +105,74 @@ double matmul_4(const double* a, const double* b, double* c, int n) {
 	return diag.get_value();
 }
 int main(int argc, char** argv) {
-	if (argc != 2) {
-		std::cerr << "*** Incorrect number of arguments ***\n";
-		std::cerr << "Usage: " << argv[0]
-			<< " no_of_rows_or_columns\n";
-		return 1;
-	}
 	std::cout << std::fixed << std::setprecision(2);
 
-	// size of each matrix (len by len)
-	int len = std::atoi(argv[1]);
-
-	// allocate memory for matrices
 	steady_clock::time_point ts, te;
 	double diag;
 	double* a, *b, *c;
-	try {
-		a = new double[len*len];
-		b = new double[len*len];
-		c = new double[len*len];
+	int nSize[] = { 
+		500, 
+		1000, 
+		1500, 
+		2000, 
+		2500,
+		3000,
+		3500,
+		4000
+	};
+
+	for(int n = 0; n < sizeof(nSize)/sizeof(nSize[0]); n++)  {
+		int len = nSize[n];
+		try {
+			a = new double[len*len];
+			b = new double[len*len];
+			c = new double[len*len];
+		}
+		catch (std::exception& e) {
+			std::cerr << "*** Failed to Allocate Memory for "
+				<< len << " by " << len << "matrices" << std::endl;
+			return 2;
+		}
+		// initialize a and b
+		for (int i = 0; i < len*len; i++) {
+			a[i] = 0.0;
+			b[i] = 0.0;
+		}
+		for (int i = 0; i < len; i++) {
+			a[i*len + i] = 1.0;
+			b[i*len + i] = 1.0;
+		}
+		ts = steady_clock::now();
+		diag = matmul_0(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("w6 serial        ", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_1(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 serial reverse", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_2(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 cilk_for      ", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_3(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 cilk_for reduc", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		ts = steady_clock::now();
+		diag = matmul_4(a, b, c, len);
+		te = steady_clock::now();
+		reportTime("\nw6 cilk_for simd ", te - ts);
+		std::cout << len << " = " << diag << std::endl;
+		// deallocate
+		delete[] a;
+		delete[] b;
+		delete[] c;
+		std::cout << std::endl;
 	}
-	catch (std::exception& e) {
-		std::cerr << "*** Failed to Allocate Memory for "
-			<< len << " by " << len << "matrices" << std::endl;
-		return 2;
-	}
-
-	// initialize a and b
-	for (int i = 0; i < len*len; i++) {
-		a[i] = 0.0;
-		b[i] = 0.0;
-	}
-	for (int i = 0; i < len; i++) {
-		a[i*len + i] = 1.0;
-		b[i*len + i] = 1.0;
-	}
-
-	ts = steady_clock::now();
-	diag = matmul_0(a, b, c, len);
-	te = steady_clock::now();
-	reportTime("w6 serial        ", te - ts);
-	std::cout << len << " = " << diag << std::endl;
-
-	ts = steady_clock::now();
-	diag = matmul_1(a, b, c, len);
-	te = steady_clock::now();
-	reportTime("\nw6 serial reverse", te - ts);
-	std::cout << len << " = " << diag << std::endl;
-
-	ts = steady_clock::now();
-	diag = matmul_2(a, b, c, len);
-	te = steady_clock::now();
-	reportTime("\nw6 cilk_for      ", te - ts);
-	std::cout << len << " = " << diag << std::endl;
-
-	ts = steady_clock::now();
-	diag = matmul_3(a, b, c, len);
-	te = steady_clock::now();
-	reportTime("\nw6 cilk_for reduc", te - ts);
-	std::cout << len << " = " << diag << std::endl;
-
-	ts = steady_clock::now();
-	diag = matmul_4(a, b, c, len);
-	te = steady_clock::now();
-	reportTime("\nw6 cilk_for simd ", te - ts);
-	std::cout << len << " = " << diag << std::endl;
-
-	// deallocate
-	delete[] a;
-	delete[] b;
-	delete[] c;
-	std::cout << std::endl;
 	char ci;
 	std::cin >> ci;
 }
